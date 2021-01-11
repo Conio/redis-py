@@ -27,11 +27,13 @@ class DummyConnection(object):
 
 class TestConnectionPool(object):
     def get_pool(self, connection_kwargs=None, max_connections=None,
+                 min_connections=None,
                  connection_class=redis.Connection):
         connection_kwargs = connection_kwargs or {}
         pool = redis.ConnectionPool(
             connection_class=connection_class,
             max_connections=max_connections,
+            min_connections=min_connections,
             **connection_kwargs)
         return pool
 
@@ -55,6 +57,20 @@ class TestConnectionPool(object):
         pool.get_connection('_')
         with pytest.raises(redis.ConnectionError):
             pool.get_connection('_')
+
+    def test_min_connections(self):
+        pool = self.get_pool(min_connections=3)
+        connections = [pool.get_connection('_') for _ in range(30)]
+        assert 0 == pool.available_connections
+        for i, connection in enumerate(connections):
+            pool.release(connection)
+            assert min(i + 1, 3) == pool.available_connections
+
+        for i, connection in enumerate(connections):
+            if i >= 30 - 3:
+                assert connection.is_open
+            else:
+                assert not connection.is_open
 
     def test_reuse_previously_released_connection(self):
         pool = self.get_pool()

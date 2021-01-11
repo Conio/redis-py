@@ -832,6 +832,10 @@ class Connection(object):
             output.append(SYM_EMPTY.join(pieces))
         return output
 
+    @property
+    def is_open(self):
+        return self._sock is not None
+
 
 class SSLConnection(Connection):
 
@@ -1086,7 +1090,7 @@ class ConnectionPool(object):
         return cls(**kwargs)
 
     def __init__(self, connection_class=Connection, max_connections=None,
-                 **connection_kwargs):
+                 min_connections=None, **connection_kwargs):
         """
         Create a connection pool. If max_connections is set, then this
         object raises redis.ConnectionError when the pool's limit is reached.
@@ -1101,10 +1105,14 @@ class ConnectionPool(object):
         if not isinstance(max_connections, (int, long)) or max_connections < 0:
             raise ValueError('"max_connections" must be a positive integer')
 
+        min_connections = min_connections or 2 ** 31
+        if not isinstance(min_connections, (int, long)) or min_connections < 0:
+            raise ValueError('"min_connections" must be a positive integer')
+
         self.connection_class = connection_class
         self.connection_kwargs = connection_kwargs
         self.max_connections = max_connections
-        self.min_connections = connection_kwargs.get('min_connections', 2 ** 31)
+        self.min_connections = min_connections
 
         # a lock to protect the critical section in _checkpid().
         # this lock is acquired when the process id changes, such as
@@ -1193,6 +1201,10 @@ class ConnectionPool(object):
                     self.reset()
             finally:
                 self._fork_lock.release()
+
+    @property
+    def available_connections(self):
+        return len(self._available_connections)
 
     def get_connection(self, command_name, *keys, **options):
         "Get a connection from the pool"
