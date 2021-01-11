@@ -1,4 +1,6 @@
 from __future__ import unicode_literals
+
+import logging
 from distutils.version import StrictVersion
 from itertools import chain
 from time import time
@@ -41,6 +43,8 @@ except ImportError:
 NONBLOCKING_EXCEPTION_ERROR_NUMBERS = {
     BlockingIOError: errno.EWOULDBLOCK,
 }
+
+_LOGGER = logging.getLogger('redis.connection')
 
 if ssl_available:
     if hasattr(ssl, 'SSLWantReadError'):
@@ -194,10 +198,12 @@ class SocketBuffer(object):
         try:
             if custom_timeout:
                 sock.settimeout(timeout)
+            start = time()
             while True:
                 data = recv(self._sock, socket_read_size)
                 # an empty string indicates the server shutdown the socket
                 if isinstance(data, bytes) and len(data) == 0:
+                    _LOGGER.error('Connection closed abruptly, length %s, marker %s', length, marker)
                     raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
                 buf.write(data)
                 data_length = len(data)
@@ -205,13 +211,17 @@ class SocketBuffer(object):
                 marker += data_length
 
                 if length is not None and length > marker:
+                    if time() - start > 5:
+                        _LOGGER.warning('Slow read from socket, time: %s', time() - start)
                     continue
                 return True
         except socket.timeout:
+            _LOGGER.exception('_read_from_socket timeout')
             if raise_on_timeout:
                 raise TimeoutError("Timeout reading from socket")
             return False
         except NONBLOCKING_EXCEPTIONS as ex:
+            _LOGGER.exception('_read_from_socket failed')
             # if we're in nonblocking mode and the recv raises a
             # blocking error, simply return False indicating that
             # there's no data to be read. otherwise raise the
@@ -277,6 +287,7 @@ class SocketBuffer(object):
             self.purge()
             self._buffer.close()
         except Exception:
+            _LOGGER.exception('Error on close')
             # issue #633 suggests the purge/close somehow raised a
             # BadFileDescriptor error. Perhaps the client ran out of
             # memory or something else? It's probably OK to ignore
@@ -299,6 +310,7 @@ class PythonParser(BaseParser):
         try:
             self.on_disconnect()
         except Exception:
+            _LOGGER.exception('Error on disconnect')
             pass
 
     def on_connect(self, connection):
@@ -543,6 +555,7 @@ class Connection(object):
         try:
             self.disconnect()
         except Exception:
+            _LOGGER.exception('Error on disconnect')
             pass
 
     def register_connect_callback(self, callback):
@@ -607,6 +620,7 @@ class Connection(object):
                 return sock
 
             except socket.error as _:
+                _LOGGER.exception('Error connecting')
                 err = _
                 if sock is not None:
                     sock.close()
@@ -674,6 +688,7 @@ class Connection(object):
                 shutdown(self._sock, socket.SHUT_RDWR)
             self._sock.close()
         except socket.error:
+            _LOGGER.exception('Error while disconnecting')
             pass
         self._sock = None
 
@@ -686,6 +701,7 @@ class Connection(object):
                     raise ConnectionError(
                         'Bad response from PING health check')
             except (ConnectionError, TimeoutError):
+                _LOGGER.exception('Error checking health')
                 self.disconnect()
                 self.send_command('PING', check_health=False)
                 if nativestr(self.read_response()) != 'PONG':
@@ -1088,6 +1104,7 @@ class ConnectionPool(object):
         self.connection_class = connection_class
         self.connection_kwargs = connection_kwargs
         self.max_connections = max_connections
+        self.min_connections = connection_kwargs.get('min_connections', 2 ** 31)
 
         # a lock to protect the critical section in _checkpid().
         # this lock is acquired when the process id changes, such as
@@ -1245,7 +1262,19 @@ class ConnectionPool(object):
                 # connection can take its place if needed
                 self._created_connections -= 1
                 connection.disconnect()
-                return
+            self.close_above_min_connections()
+
+    def close_above_min_connections(self):
+        if len(self._available_connections) >= self.min_connections:
+            _LOGGER.warning(
+                '%s connections above the min confirmations %s, closing some',
+                len(self._available_connections), self.min_connections
+            )
+            self._available_connections, connections_to_close = \
+                self._available_connections[-self.min_connections:], \
+                self._available_connections[:-self.min_connections]
+            for connection in connections_to_close:
+                connection.disconnect()
 
     def owns_connection(self, connection):
         return connection.pid == self.pid

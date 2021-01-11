@@ -1,6 +1,7 @@
 """Internal module for Python 2 backwards compatibility."""
 # flake8: noqa
 import errno
+import logging
 import socket
 import sys
 
@@ -16,6 +17,8 @@ def shutdown(sock, *args, **kwargs):
 def ssl_wrap_socket(context, sock, *args, **kwargs):
     return context.wrap_socket(sock, *args, **kwargs)
 
+
+_LOGGER = logging.getLogger('redis._compat')
 
 # For Python older than 3.5, retry EINTR.
 if sys.version_info[0] < 3 or (sys.version_info[0] == 3 and
@@ -52,6 +55,7 @@ if sys.version_info[0] < 3 or (sys.version_info[0] == 3 and
                     attempted = True
                     return func(*args, **kwargs)
                 except socket.error as e:
+                    _LOGGER.exception('Socket error')
                     if e.args[0] == errno.EINTR:
                         continue
                     raise
@@ -99,6 +103,7 @@ if sys.version_info[0] < 3:
             try:
                 return func(*args, **kwargs)
             except _SSLError as e:
+                _LOGGER.exception('SSL error')
                 message = len(e.args) == 1 and unicode(e.args[0]) or ''
                 if any(x in message for x in _EXPECTED_SSL_TIMEOUT_MESSAGES):
                     # Raise socket.timeout for compatibility with Python 3.
