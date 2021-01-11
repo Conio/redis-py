@@ -707,7 +707,8 @@ class Redis(object):
                  ssl=False, ssl_keyfile=None, ssl_certfile=None,
                  ssl_cert_reqs='required', ssl_ca_certs=None,
                  ssl_check_hostname=False,
-                 max_connections=None, single_connection_client=False,
+                 max_connections=None, min_connections=None,
+                 single_connection_client=False,
                  health_check_interval=0, client_name=None, username=None):
         if not connection_pool:
             if charset is not None:
@@ -729,6 +730,7 @@ class Redis(object):
                 'decode_responses': decode_responses,
                 'retry_on_timeout': retry_on_timeout,
                 'max_connections': max_connections,
+                'min_connections': min_connections,
                 'health_check_interval': health_check_interval,
                 'client_name': client_name
             }
