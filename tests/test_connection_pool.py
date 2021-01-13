@@ -62,9 +62,11 @@ class TestConnectionPool(object):
         pool = self.get_pool(min_connections=3)
         connections = [pool.get_connection('_') for _ in range(30)]
         assert 0 == pool.available_connections
+        assert 30 == pool.created_connections
         for i, connection in enumerate(connections):
             pool.release(connection)
             assert min(i + 1, 3) == pool.available_connections
+        assert 3 == pool.created_connections
 
         for i, connection in enumerate(connections):
             if i >= 30 - 3:

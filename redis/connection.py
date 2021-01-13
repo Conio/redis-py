@@ -1206,6 +1206,10 @@ class ConnectionPool(object):
     def available_connections(self):
         return len(self._available_connections)
 
+    @property
+    def created_connections(self):
+        return self._created_connections
+
     def get_connection(self, command_name, *keys, **options):
         "Get a connection from the pool"
         self._checkpid()
@@ -1287,6 +1291,8 @@ class ConnectionPool(object):
                 self._available_connections[:-self.min_connections]
             for connection in connections_to_close:
                 connection.disconnect()
+            self._created_connections -= len(connections_to_close)
+            _LOGGER.debug('New created connections %s', self._created_connections)
 
     def owns_connection(self, connection):
         return connection.pid == self.pid
