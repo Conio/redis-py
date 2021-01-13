@@ -221,7 +221,7 @@ class SocketBuffer(object):
                 raise TimeoutError("Timeout reading from socket")
             return False
         except NONBLOCKING_EXCEPTIONS as ex:
-            _LOGGER.exception('_read_from_socket failed')
+            _LOGGER.debug('_read_from_socket failed', exc_info=True)
             # if we're in nonblocking mode and the recv raises a
             # blocking error, simply return False indicating that
             # there's no data to be read. otherwise raise the
