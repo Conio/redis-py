@@ -1,4 +1,6 @@
 from __future__ import unicode_literals
+
+import logging
 from itertools import chain
 import datetime
 import warnings
@@ -26,6 +28,9 @@ from redis.exceptions import (
 
 SYM_EMPTY = b''
 EMPTY_RESPONSE = 'EMPTY_RESPONSE'
+
+
+_LOGGER = logging.getLogger('redis.client')
 
 
 def list_or_args(keys, args):
@@ -902,9 +907,11 @@ class Redis(object):
             conn.send_command(*args)
             return self.parse_response(conn, command_name, **options)
         except (ConnectionError, TimeoutError) as e:
+            _LOGGER.exception('Error executing %s, disconnecting', command_name)
             conn.disconnect()
             if not (conn.retry_on_timeout and isinstance(e, TimeoutError)):
                 raise
+            _LOGGER.warning('Retrying command %s')
             conn.send_command(*args)
             return self.parse_response(conn, command_name, **options)
         finally:
@@ -3842,6 +3849,7 @@ class Pipeline(Redis):
             conn.send_command(*args)
             return self.parse_response(conn, command_name, **options)
         except (ConnectionError, TimeoutError) as e:
+            _LOGGER.exception('Error executing %s, closing connection', command_name)
             conn.disconnect()
             # if we were already watching a variable, the watch is no longer
             # valid since this connection has died. raise a WatchError, which
