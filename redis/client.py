@@ -907,7 +907,7 @@ class Redis(object):
             conn.send_command(*args)
             return self.parse_response(conn, command_name, **options)
         except (ConnectionError, TimeoutError) as e:
-            _LOGGER.exception('Error executing %s, disconnecting', command_name)
+            _LOGGER.exception('Error executing %s, closing connection', command_name)
             conn.disconnect()
             if not (conn.retry_on_timeout and isinstance(e, TimeoutError)):
                 raise
@@ -3487,6 +3487,7 @@ class PubSub(object):
         try:
             return command(*args, **kwargs)
         except (ConnectionError, TimeoutError) as e:
+            _LOGGER.exception('Error in pubsub, closing connection')
             connection.disconnect()
             if not (connection.retry_on_timeout and
                     isinstance(e, TimeoutError)):
@@ -3802,6 +3803,7 @@ class Pipeline(Redis):
                 self.connection.send_command('UNWATCH')
                 self.connection.read_response()
             except ConnectionError:
+                _LOGGER.exception('Error unwatching, closing connection')
                 # disconnect will also remove any previous WATCHes
                 self.connection.disconnect()
         # clean up the other instance attributes
@@ -3935,6 +3937,10 @@ class Pipeline(Redis):
             response.insert(i, e)
 
         if len(response) != len(commands):
+            _LOGGER.error(
+                'responses %s != commands %s, closing connection',
+                len(response), len(commands)
+            )
             self.connection.disconnect()
             raise ResponseError("Wrong number of response items from "
                                 "pipeline execution")
@@ -4028,6 +4034,7 @@ class Pipeline(Redis):
         try:
             return execute(conn, stack, raise_on_error)
         except (ConnectionError, TimeoutError) as e:
+            _LOGGER.exception('Error executing pipeline, closing connection')
             conn.disconnect()
             # if we were watching a variable, the watch is no longer valid
             # since this connection has died. raise a WatchError, which

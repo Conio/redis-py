@@ -1,3 +1,4 @@
+import logging
 import random
 import weakref
 
@@ -14,6 +15,9 @@ class MasterNotFoundError(ConnectionError):
 
 class SlaveNotFoundError(ConnectionError):
     pass
+
+
+_LOGGER = logging.getLogger('redis.sentinel')
 
 
 class SentinelManagedConnection(Connection):
@@ -54,6 +58,10 @@ class SentinelManagedConnection(Connection):
         try:
             return super(SentinelManagedConnection, self).read_response()
         except ReadOnlyError:
+            _LOGGER.exception(
+                'Error reading response, closing_connection? %s',
+                self.connection_pool.is_master
+            )
             if self.connection_pool.is_master:
                 # When talking to a master, a ReadOnlyError when likely
                 # indicates that the previous master that we're still connected

@@ -579,6 +579,7 @@ class Connection(object):
         try:
             self.on_connect()
         except RedisError:
+            _LOGGER.exception('Error connecting, closing connection')
             # clean up after any error in on_connect
             self.disconnect()
             raise
@@ -701,7 +702,7 @@ class Connection(object):
                     raise ConnectionError(
                         'Bad response from PING health check')
             except (ConnectionError, TimeoutError):
-                _LOGGER.exception('Error checking health')
+                _LOGGER.exception('Error checking health, closing connection')
                 self.disconnect()
                 self.send_command('PING', check_health=False)
                 if nativestr(self.read_response()) != 'PONG':
@@ -721,9 +722,11 @@ class Connection(object):
             for item in command:
                 sendall(self._sock, item)
         except socket.timeout:
+            _LOGGER.exception('Socket timeout, closing connection')
             self.disconnect()
             raise TimeoutError("Timeout writing to socket")
         except socket.error as e:
+            _LOGGER.exception('Socket error, closing connection')
             self.disconnect()
             if len(e.args) == 1:
                 errno, errmsg = 'UNKNOWN', e.args[0]
@@ -733,6 +736,7 @@ class Connection(object):
             raise ConnectionError("Error %s while writing to socket. %s." %
                                   (errno, errmsg))
         except BaseException:
+            _LOGGER.exception('Error sending packet, closing connection')
             self.disconnect()
             raise
 
@@ -754,14 +758,17 @@ class Connection(object):
         try:
             response = self._parser.read_response()
         except socket.timeout:
+            _LOGGER.exception('Socket timeout, closing connection')
             self.disconnect()
             raise TimeoutError("Timeout reading from %s:%s" %
                                (self.host, self.port))
         except socket.error as e:
+            _LOGGER.exception('Error reading response, closing connection')
             self.disconnect()
             raise ConnectionError("Error while reading from %s:%s : %s" %
                                   (self.host, self.port, e.args))
         except BaseException:
+            _LOGGER.exception('Error reading response, closing connection')
             self.disconnect()
             raise
 
@@ -1231,6 +1238,7 @@ class ConnectionPool(object):
                 if connection.can_read():
                     raise ConnectionError('Connection has data')
             except ConnectionError:
+                _LOGGER.exception('Error getting connection, closing connection')
                 connection.disconnect()
                 connection.connect()
                 if connection.can_read():
@@ -1432,6 +1440,7 @@ class BlockingConnectionPool(ConnectionPool):
                 if connection.can_read():
                     raise ConnectionError('Connection has data')
             except ConnectionError:
+                _LOGGER.exception('Error getting connection, closing connection')
                 connection.disconnect()
                 connection.connect()
                 if connection.can_read():
@@ -1464,7 +1473,7 @@ class BlockingConnectionPool(ConnectionPool):
             # we don't want this connection
             pass
 
-    def disconnect(self):
+    def disconnect(self, **_):
         "Disconnects all connections in the pool."
         self._checkpid()
         for connection in self._connections:
