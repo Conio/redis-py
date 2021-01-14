@@ -1112,7 +1112,7 @@ class ConnectionPool(object):
         if not isinstance(max_connections, (int, long)) or max_connections < 0:
             raise ValueError('"max_connections" must be a positive integer')
 
-        min_connections = min_connections or 2 ** 31
+        min_connections = min_connections or 10
         if not isinstance(min_connections, (int, long)) or min_connections < 0:
             raise ValueError('"min_connections" must be a positive integer')
 
