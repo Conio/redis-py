@@ -712,7 +712,7 @@ class Redis(object):
                  ssl=False, ssl_keyfile=None, ssl_certfile=None,
                  ssl_cert_reqs='required', ssl_ca_certs=None,
                  ssl_check_hostname=False,
-                 max_connections=None, min_connections=None,
+                 max_connections=None, min_connections=10,
                  single_connection_client=False,
                  health_check_interval=0, client_name=None, username=None):
         if not connection_pool:
